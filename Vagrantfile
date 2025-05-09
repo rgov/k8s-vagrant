@@ -13,16 +13,17 @@ Vagrant.configure("2") do |config|
   ]
 
 
-  # Create a 'routes' file which contains a mapping of pod subnets to the node
+  # Create a 'machines' file which contains a mapping of pod subnets to the node
   # hostname. At runtime, we'll create static routes.
   config.trigger.before :up do |trigger|
-    trigger.name = "Output routes file"
+    trigger.name = "Output machines file"
+    trigger.only_on = (boxes.find { |b| b[:role] == :jumpbox })[:name]  # first
     trigger.ruby do |env,machine|
-      next unless machine.name.to_s == "jumpbox"  # FIXME
       Dir.mkdir("shared") unless File.exist?("shared")
-      File.open("shared/routes", "w") do |f|
+      File.open("shared/machines", "w") do |f|
         boxes.each do |b|
-          f.puts "#{b[:podsubnet]} #{b[:name]}" if b[:podsubnet]
+          next if not [:control, :worker].include? b[:role]
+          f.puts "x.x.x.x #{b[:name]}.kubernetes.local #{b[:name]} #{b[:podsubnet]}"
         end
       end
     end
@@ -169,10 +170,10 @@ Vagrant.configure("2") do |config|
       node.vm.provision "shell", inline: <<-SHELL
         set -eux
         rsync -a --no-o --no-g /vagrant/files/usr/local/bin/ /usr/local/bin/
-        cp /vagrant/files/etc/systemd/system/update-hosts.{service,timer} \
+        cp /vagrant/files/etc/systemd/system/update-machines.{service,timer} \
           /etc/systemd/system/
         systemctl daemon-reload
-        systemctl enable --now update-hosts.timer
+        systemctl enable --now update-machines.timer
       SHELL
 
 

@@ -1,0 +1,7 @@
+[Unit]
+Description=Update hosts from /vagrant/shared/machines
+ConditionPathExists=/vagrant/shared/machines
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-machines

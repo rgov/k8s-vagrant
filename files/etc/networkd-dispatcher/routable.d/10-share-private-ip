@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# This script updates a record in /vagrant/shared/hosts pointing to the
+# This script updates a record in /vagrant/shared/machines pointing to the
 # IP address assigned by VMware's DHCP server to our private network interface.
 #
 # This is necessary because we can't assign a static IP with the VMware
@@ -9,10 +9,10 @@
 set -eu
 
 if [ "$IFACE" = "eth1" ]; then
-  HOSTNAME=$(hostname)
-  FQDN=${HOSTNAME}.kubernetes.local
+    HOSTNAME=$(hostname --short)
+    FQDN=${HOSTNAME}.kubernetes.local
 
-  touch /vagrant/shared/hosts
-  sed -i "/[[:space:]]${HOSTNAME}\$/d" /vagrant/shared/hosts
-  echo "${ADDR} ${FQDN} ${HOSTNAME}" >> /vagrant/shared/hosts
+    touch /vagrant/shared/machines
+    sed -i -E "s/^[0-9x.]+( .*\b${HOSTNAME}\b)/${ADDR}\1/" \
+        /vagrant/shared/machines
 fi

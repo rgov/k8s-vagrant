@@ -1,8 +1,0 @@
-[Unit]
-Description=Update hosts from /vagrant/shared/hosts
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/sed -i '/^# Kubernetes peers/,$d' /etc/hosts
-ExecStart=/bin/sh -c 'echo "# Kubernetes peers" >> /etc/hosts && cat /vagrant/shared/hosts >> /etc/hosts'
-ExecStart=/usr/local/bin/update-static-routes
