@@ -16,6 +16,7 @@ Vagrant.configure("2") do |config|
   config.trigger.before :up do |trigger|
     trigger.name = "Output routes file"
     trigger.ruby do |env,machine|
+      next unless machine.name.to_s == "jumpbox"  # FIXME
       Dir.mkdir("shared") unless File.exist?("shared")
       File.open("shared/routes", "w") do |f|
         boxes.each do |b|
@@ -25,6 +26,62 @@ Vagrant.configure("2") do |config|
     end
   end
 
+
+  # Generate a certificate authority and certificates.
+  #
+  # /!\ WARNING: SECURITY IMPLICATIONS /!\
+  # Because this directory is synced with each node as /vagrant, all of the
+  # private keys are visible, including the certificate authority's signing key!
+  remove_keys_after_copy = false  # false saves time but is more insecure
+  config.trigger.before :up do |trigger|
+    trigger.name = "Generate TLS certificates"
+    trigger.ruby do |env,machine|
+      next unless machine.name.to_s == "jumpbox"  # FIXME
+
+      # Generate the certificate authority
+      new_ca = false
+      if not File.exist?("shared/ca.key")
+        %x{openssl genrsa -out shared/ca.key 4096}
+        new_ca = true
+      end
+      if new_ca or not File.exist?("shared/ca.crt")
+        %x{openssl req -x509 -new -sha512 -noenc \
+            -key shared/ca.key -days 3653 \
+            -config files/ca.conf \
+            -out shared/ca.crt}
+        new_ca = true
+      end
+
+      # Generate and sign each of the various keys.
+      #
+      # TODO: Populate some of these from the list of boxes. However, this also
+      # requires dynamically defining new sections in the ca.conf file.
+      certs = [
+        "admin", "node-0", "node-1",
+        "kube-proxy", "kube-scheduler", "kube-controller-manager",
+        "kube-api-server", "service-accounts",
+      ]
+      certs.each do |cert|
+        new_key = false
+        if not File.exist?("shared/#{cert}.key")
+          %x{openssl genrsa -out shared/#{cert}.key 4096}
+          new_key = true
+        end
+        if new_key or new_ca or not File.exist?("shared/#{cert}.crt")
+          %x{openssl req -new -key shared/#{cert}.key -sha256 \
+              -config files/ca.conf -section #{cert} \
+              -out shared/#{cert}.csr}
+          %x{openssl x509 -req -days 3653 -in shared/#{cert}.csr \
+              -copy_extensions copyall \
+              -sha256 -CA shared/ca.crt \
+              -CAkey shared/ca.key \
+              -CAcreateserial \
+              -out shared/#{cert}.crt}
+          File.unlink("shared/#{cert}.csr")
+        end
+      end
+    end
+  end
 
   boxes.each do |opts|
     config.vm.define opts[:name], primary: opts[:name] == "jumpbox" do |node|
@@ -115,6 +172,38 @@ Vagrant.configure("2") do |config|
         systemctl daemon-reload
         systemctl enable --now update-hosts.timer
       SHELL
+
+
+      # -- Certificate Authority -----------------------------------------------
+
+      # Install server node keys and certificates for creating kubeconfigs later
+      opts[:name] == "server" and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        cd /vagrant/shared/
+        cp ca.key ca.crt \
+          kube-api-server.key kube-api-server.crt \
+          service-accounts.key service-accounts.crt \
+          ~/
+
+        if [ "#{remove_keys_after_copy}" = "true" ]; then
+          rm -f /vagrant/shared/ca.key
+        fi
+      SHELL
+
+      # Install worker node keys and certificates
+      opts[:name] =~ /node-/ and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        HOSTNAME="$(hostname --short)"
+        mkdir -p /var/lib/kubelet
+        cp /vagrant/shared/ca.crt /var/lib/kubelet/ca.crt
+        cp /vagrant/shared/"$HOSTNAME".crt /var/lib/kubelet/kubelet.crt
+        cp /vagrant/shared/"$HOSTNAME".key /var/lib/kubelet/kubelet.key
+
+        if [ "#{remove_keys_after_copy}" = "true" ]; then
+          rm -f /vagrant/shared/"$HOSTNAME".key
+        fi
+      SHELL
+
 
 
       # -- Kubernetes ----------------------------------------------------------
