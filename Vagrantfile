@@ -2,12 +2,14 @@ Vagrant.configure("2") do |config|
 
   # Based on Kubernetes The Hard Way
   boxes = [
-    { :name => "jumpbox", :cpus => 1, :memory => 512,  :disk => "10GB" },
-    { :name => "server",  :cpus => 1, :memory => 2048, :disk => "20GB" },
-    { :name => "node-0",  :cpus => 1, :memory => 2048, :disk => "20GB",
-      :podsubnet => "10.200.0.0/24" },
-    #{ :name => "node-1",  :cpus => 1, :memory => 2048, :disk => "20GB",
-    #  :podsubnet => "10.200.1.0/24" },
+    { :name => "jumpbox", :role => :jumpbox,
+      :cpus => 1, :memory => 512,  :disk => "10GB" },
+    { :name => "server", :role => :control,
+      :cpus => 1, :memory => 2048, :disk => "20GB" },
+    { :name => "node-0",  :role => :worker, :podsubnet => "10.200.0.0/24",
+      :cpus => 1, :memory => 2048, :disk => "20GB" },
+    { :name => "node-1", :role => :worker, :podsubnet => "10.200.1.0/24",
+      :cpus => 1, :memory => 2048, :disk => "20GB" },
   ]
 
 
@@ -84,7 +86,7 @@ Vagrant.configure("2") do |config|
   end
 
   boxes.each do |opts|
-    config.vm.define opts[:name], primary: opts[:name] == "jumpbox" do |node|
+    config.vm.define opts[:name], primary: opts[:role] == :jumpbox do |node|
       node.vm.box = "bento/ubuntu-24.04"
       node.vm.box_version = "202502.21.0"
       node.vm.hostname = opts[:name]
@@ -123,7 +125,7 @@ Vagrant.configure("2") do |config|
       # XXX: I'm not sure why the VMs have a hosts entry `127.0.1.1 vagrant`
       # and use 127.0.2.1 for the actual hostname. This deviates from the setup
       # in Kubernetes The Hard Way.
-      opts[:name] != "jumpbox" and
+      opts[:role] != :jumpbox and
       node.vm.provision "shell", inline: <<-SHELL
         set -eux
         HOSTNAME=$(hostname --short)
@@ -133,7 +135,7 @@ Vagrant.configure("2") do |config|
       SHELL
 
       # Generate an SSH key on the jumpbox for the vagrant user
-      opts[:name] == "jumpbox" and
+      opts[:role] == :jumpbox and
       node.vm.provision "shell", privileged: false, inline: <<-SHELL
         set -eux
         ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ""
@@ -141,7 +143,7 @@ Vagrant.configure("2") do |config|
       SHELL
 
       # All other boxes: Install service for copying the key to authorized_keys
-      opts[:name] != "jumpbox" and node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] != :jumpbox and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         cp /vagrant/files/etc/systemd/system/install-jumpbox-ssh-key.service \
           /etc/systemd/system/
@@ -153,7 +155,7 @@ Vagrant.configure("2") do |config|
       #
       # This is necessary due to the aforementioned limitation where we can't
       # set a static IP on the private network interface.
-      opts[:name] != "jumpbox" and node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] != :jumpbox and node.vm.provision "shell", inline: <<-SHELL
         set -eux
 
         rsync -a --no-o --no-g \
@@ -177,7 +179,7 @@ Vagrant.configure("2") do |config|
       # -- Certificate Authority -----------------------------------------------
 
       # Install server node keys and certificates for creating kubeconfigs later
-      opts[:name] == "server" and node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] == :control and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         cd /vagrant/shared/
         cp ca.key ca.crt \
@@ -191,7 +193,7 @@ Vagrant.configure("2") do |config|
       SHELL
 
       # Install worker node keys and certificates
-      opts[:name] =~ /node-/ and node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] == :worker and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         HOSTNAME="$(hostname --short)"
         mkdir -p /var/lib/kubelet
@@ -231,7 +233,7 @@ Vagrant.configure("2") do |config|
       SHELL
 
       # Install kubectl on the jumpbox
-      false and opts[:name] == "jumpbox" and node.vm.provision "shell", inline: <<-SHELL
+      false and opts[:role] == :jumpbox and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         apt-get update
         apt-get install -y kubectl
