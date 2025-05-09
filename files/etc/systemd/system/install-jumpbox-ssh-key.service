@@ -1,0 +1,14 @@
+[Unit]
+Description=Install jumpbox SSH key if present
+ConditionPathExists=/vagrant/shared/jumpbox_ssh_key.pub
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sh -c 'umask 077 && mkdir -p /home/vagrant/.ssh || true'
+ExecStartPre=/bin/sh -c 'umask 077 && touch /home/vagrant/.ssh/authorized_keys'
+ExecStartPre=/bin/chown -R vagrant:vagrant /home/vagrant/.ssh
+ExecStart=/usr/bin/sed -i "/vagrant@jumpbox$/d" /home/vagrant/.ssh/authorized_keys
+ExecStart=/bin/sh -c 'cat /vagrant/shared/jumpbox_ssh_key.pub >> /home/vagrant/.ssh/authorized_keys'
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# The update-hosts.service can call this to set up static routes based on
+# /vagrant/shared/routes.
+
+HOSTNAME=$(hostname --short)
+while IFS=' ' read -r SUBNET HOST; do
+    # Do not add routes defined on ourselves
+    if [ "$HOSTNAME" = "$HOST" ]; then
+        continue
+    fi
+
+    ADDR=$(getent hosts "$HOST" | awk '{ print $1 }')
+    ip route add "$SUBNET" via "$ADDR"
+done < /vagrant/shared/routes
