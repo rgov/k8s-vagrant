@@ -130,7 +130,7 @@ Vagrant.configure("2") do |config|
       # -- Kubernetes ----------------------------------------------------------
 
       # Set up the Kubernetes apt repository on every box
-      false and node.vm.provision "shell", inline: <<-SHELL
+      node.vm.provision "shell", inline: <<-SHELL
         set -eux
 
         apt-get update
@@ -143,19 +143,39 @@ Vagrant.configure("2") do |config|
         mkdir -p -m 755 /etc/apt/keyrings
         curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | \
           gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-        chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
         echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg]' \
           'https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /' \
           > /etc/apt/sources.list.d/kubernetes.list
-        chmod 644 /etc/apt/sources.list.d/kubernetes.list
       SHELL
 
-      # Install kubectl on the jumpbox
-      false and opts[:role] == :jumpbox and node.vm.provision "shell", inline: <<-SHELL
+      # Set up the CRI-O apt repository on every box
+      node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+
+        CRIO_VERSION=v1.32
+        curl -fsSL \
+          "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/deb/Release.key" | \
+          gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+
+        echo 'deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg]' \
+          "https://download.opensuse.org/repositories/isv:/cri-o:/stable:/$CRIO_VERSION/deb/ /" \
+          > /etc/apt/sources.list.d/cri-o.list
+      SHELL
+
+      # Install only kubectl on the bastion systems
+      opts[:role] == :bastion and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         apt-get update
         apt-get install -y kubectl
+      SHELL
+
+      # Install common dependencies on control and worker systems
+      [:control, :worker].include?(opts[:role]) and
+      node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        apt-get update
+        apt-get install -y cri-o kubeadm kubelet kubectl
       SHELL
     end
   end
