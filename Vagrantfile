@@ -1,8 +1,7 @@
 Vagrant.configure("2") do |config|
 
-  # Based on Kubernetes The Hard Way
   boxes = [
-    { :name => "jumpbox", :role => :jumpbox,
+    { :name => "jumpbox", :role => :bastion,
       :cpus => 1, :memory => 512,  :disk => "10GB" },
     { :name => "server", :role => :control,
       :cpus => 1, :memory => 2048, :disk => "20GB" },
@@ -17,7 +16,7 @@ Vagrant.configure("2") do |config|
   # hostname. At runtime, we'll create static routes.
   config.trigger.before :up do |trigger|
     trigger.name = "Output machines file"
-    trigger.only_on = (boxes.find { |b| b[:role] == :jumpbox })[:name]  # first
+    trigger.only_on = (boxes.find { |b| b[:role] == :bastion })[:name]  # first
     trigger.ruby do |env,machine|
       Dir.mkdir("shared") unless File.exist?("shared")
       File.open("shared/machines", "w") do |f|
@@ -87,7 +86,7 @@ Vagrant.configure("2") do |config|
   end
 
   boxes.each do |opts|
-    config.vm.define opts[:name], primary: opts[:role] == :jumpbox do |node|
+    config.vm.define opts[:name], primary: opts[:role] == :bastion do |node|
       node.vm.box = "bento/ubuntu-24.04"
       node.vm.box_version = "202502.21.0"
       node.vm.hostname = opts[:name]
@@ -126,8 +125,7 @@ Vagrant.configure("2") do |config|
       # XXX: I'm not sure why the VMs have a hosts entry `127.0.1.1 vagrant`
       # and use 127.0.2.1 for the actual hostname. This deviates from the setup
       # in Kubernetes The Hard Way.
-      opts[:role] != :jumpbox and
-      node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] != :bastion and node.vm.provision "shell", inline: <<-SHELL
         set -eux
         HOSTNAME=$(hostname --short)
         FQDN=${HOSTNAME}.kubernetes.local
@@ -135,28 +133,29 @@ Vagrant.configure("2") do |config|
         test "$(hostname --fqdn)" = "$FQDN"
       SHELL
 
-      # Generate an SSH key on the jumpbox for the vagrant user
-      opts[:role] == :jumpbox and
+      # Generate an SSH key on the bastion hosts for the vagrant user
+      opts[:role] == :bastion and
       node.vm.provision "shell", privileged: false, inline: <<-SHELL
         set -eux
         ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ""
-        cp ~/.ssh/id_rsa.pub /vagrant/shared/jumpbox_ssh_key.pub
+        cp ~/.ssh/id_rsa.pub /vagrant/shared/bastion_ssh_key.#{opts[:name]}.pub
       SHELL
 
-      # All other boxes: Install service for copying the key to authorized_keys
-      opts[:role] != :jumpbox and node.vm.provision "shell", inline: <<-SHELL
+      # All other boxes: Install the SSH keys.
+      # FIXME: This assumes that all bastion hosts are provisioned first.
+      opts[:role] != :bastion and
+      node.vm.provision "shell", privileged: false, inline: <<-SHELL
         set -eux
-        cp /vagrant/files/etc/systemd/system/install-jumpbox-ssh-key.service \
-          /etc/systemd/system/
-        systemctl daemon-reload
-        systemctl enable --now install-jumpbox-ssh-key.service
+        umask 077
+        mkdir -p ~/.ssh || true
+        cat /vagrant/shared/bastion_ssh_key.*.pub >> ~/.ssh/authorized_keys
       SHELL
 
       # Install networkd-dispatcher actions.
       #
       # This is necessary due to the aforementioned limitation where we can't
       # set a static IP on the private network interface.
-      opts[:role] != :jumpbox and node.vm.provision "shell", inline: <<-SHELL
+      opts[:role] != :bastion and node.vm.provision "shell", inline: <<-SHELL
         set -eux
 
         rsync -a --no-o --no-g \
