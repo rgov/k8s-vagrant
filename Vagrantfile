@@ -111,6 +111,13 @@ Vagrant.configure("2") do |config|
         rm -f 10-help-text 50-motd-news 91-contract-ua-esm-status 99-bento
       SHELL
 
+      # Disable swap
+      node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        swapoff -a
+        sed -i '/\\bswap\\b/ s/^/#/' /etc/fstab
+      SHELL
+
 
       # -- Networking ----------------------------------------------------------
 
