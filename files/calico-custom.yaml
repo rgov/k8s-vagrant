@@ -43,15 +43,3 @@ apiVersion: operator.tigera.io/v1
 kind: Whisker
 metadata:
   name: default
-
----
-# Add the IPPool
-apiVersion: crd.projectcalico.org/v1
-kind: IPPool
-metadata:
-  name: default-ipv4-ippool
-spec:
-  cidr: 10.244.0.0/16
-  vxlanMode: CrossSubnet
-  natOutgoing: true
-  nodeSelector: all()

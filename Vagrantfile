@@ -220,6 +220,7 @@ Vagrant.configure("2") do |config|
           --apiserver-advertise-address="$ADDR" \
           --control-plane-endpoint="${FQDN}:6443" \
           --cri-socket=unix:///var/run/crio/crio.sock \
+          --pod-network-cidr=10.244.0.0/16
 
         # Configure the Calico add-on
         export KUBECONFIG=/etc/kubernetes/admin.conf
