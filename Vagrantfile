@@ -84,6 +84,15 @@ Vagrant.configure("2") do |config|
         test "$(hostname --fqdn)" = "$FQDN"
       SHELL
 
+      # Enable IP forwarding
+      opts[:role] != :bastion and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-ip-forward.conf
+        sysctl --system
+        test "$(cat /proc/sys/net/ipv4/ip_forward)" = "1"
+      SHELL
+
+
       # Generate an SSH key on the bastion hosts for the vagrant user
       opts[:role] == :bastion and
       node.vm.provision "shell", privileged: false, inline: <<-SHELL
