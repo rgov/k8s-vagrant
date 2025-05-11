@@ -12,8 +12,8 @@ Vagrant.configure("2") do |config|
   ]
 
 
-  # Create a 'machines' file which contains a mapping of pod subnets to the node
-  # hostname. At runtime, we'll create static routes.
+  # Create a 'machines' file which contains a mapping of pod hostnames to
+  # dynamically assigned IP addresses. These will be populated at runtime.
   config.trigger.before :up do |trigger|
     trigger.name = "Output machines file"
     trigger.only_on = boxes[0][:name]
@@ -22,7 +22,7 @@ Vagrant.configure("2") do |config|
       File.open("shared/machines", "w") do |f|
         boxes.each do |b|
           next if not [:control, :worker].include? b[:role]
-          f.puts "x.x.x.x #{b[:name]}.kubernetes.local #{b[:name]} #{b[:podsubnet]}"
+          f.puts "x.x.x.x #{b[:name]}.kubernetes.local #{b[:name]}"
         end
       end
     end
@@ -187,8 +187,7 @@ Vagrant.configure("2") do |config|
           cri-o \
           kubeadm \
           kubelet \
-          kubectl \
-          yq
+          kubectl
         systemctl enable --now crio kubelet
       SHELL
 
