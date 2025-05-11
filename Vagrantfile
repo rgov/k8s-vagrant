@@ -1,8 +1,8 @@
 Vagrant.configure("2") do |config|
 
   boxes = [
-    { :name => "jumpbox", :role => :bastion,
-      :cpus => 1, :memory => 512,  :disk => "10GB" },
+    # { :name => "jumpbox", :role => :bastion,
+    #   :cpus => 1, :memory => 512,  :disk => "10GB" },
     { :name => "server", :role => :control,
       :cpus => 2, :memory => 2048, :disk => "20GB" },
     { :name => "worker-0",  :role => :worker,
@@ -16,7 +16,7 @@ Vagrant.configure("2") do |config|
   # hostname. At runtime, we'll create static routes.
   config.trigger.before :up do |trigger|
     trigger.name = "Output machines file"
-    trigger.only_on = (boxes.find { |b| b[:role] == :bastion })[:name]  # first
+    trigger.only_on = boxes[0][:name]
     trigger.ruby do |env,machine|
       Dir.mkdir("shared") unless File.exist?("shared")
       File.open("shared/machines", "w") do |f|
@@ -29,8 +29,8 @@ Vagrant.configure("2") do |config|
   end
 
 
-  boxes.each do |opts|
-    config.vm.define opts[:name], primary: opts[:role] == :bastion do |node|
+  boxes.each_with_index do |opts, i|
+    config.vm.define opts[:name], primary: i == 0 do |node|
       node.vm.box = "bento/ubuntu-24.04"
       node.vm.box_version = "202502.21.0"
       node.vm.hostname = opts[:name]
@@ -103,7 +103,7 @@ Vagrant.configure("2") do |config|
 
       # All other boxes: Install the SSH keys.
       # FIXME: This assumes that all bastion hosts are provisioned first.
-      opts[:role] != :bastion and
+      opts[:role] != :bastion and boxes.any? { |b| b[:role] == :bastion } and
       node.vm.provision "shell", privileged: false, inline: <<-SHELL
         set -eux
         umask 077
