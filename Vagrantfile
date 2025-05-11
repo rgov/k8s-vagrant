@@ -222,8 +222,13 @@ Vagrant.configure("2") do |config|
           --cri-socket=unix:///var/run/crio/crio.sock \
           --pod-network-cidr=10.244.0.0/16
 
-        # Configure the Calico add-on
+        # Copy the admin config to the vagrant user
         export KUBECONFIG=/etc/kubernetes/admin.conf
+        mkdir /home/vagrant/.kube
+        cp "$KUBECONFIG" /home/vagrant/.kube/config
+        chown -R vagrant:vagrant /home/vagrant/.kube/config
+
+        # Configure the Calico add-on
         kubectl create -f \
           https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/tigera-operator.yaml
 
@@ -231,12 +236,7 @@ Vagrant.configure("2") do |config|
           sleep 1
         done 2>/dev/null
 
-        kubectl create -f /vagrant/files/calico-custom.yaml
-
-        # Copy the admin config to the vagrant user
-        mkdir /home/vagrant/.kube
-        cp /etc/kubernetes/admin.conf /home/vagrant/.kube/config
-        chown -R vagrant:vagrant /home/vagrant/.kube/config
+        kubectl apply -f /vagrant/files/calico-custom.yaml
       SHELL
 
       # The control node generates a script for each worker to join the cluster
