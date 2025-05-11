@@ -171,6 +171,19 @@ Vagrant.configure("2") do |config|
           > /etc/apt/sources.list.d/cri-o.list
       SHELL
 
+      # Set up the Helm community apt repository on the control server
+      opts[:role] == :control and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+
+        curl -fsSL https://baltocdn.com/helm/signing.asc | \
+          gpg --dearmor -o /etc/apt/keyrings/helm.gpg
+
+        echo "deb [arch=$(dpkg --print-architecture)" \
+          "signed-by=/etc/apt/keyrings/helm.gpg]" \
+          "https://baltocdn.com/helm/stable/debian/ all main" \
+          > /etc/apt/sources.list.d/helm-stable-debian.list
+      SHELL
+
       # Install only kubectl on the bastion systems
       opts[:role] == :bastion and node.vm.provision "shell", inline: <<-SHELL
         set -eux
@@ -189,6 +202,12 @@ Vagrant.configure("2") do |config|
           kubelet \
           kubectl
         systemctl enable --now crio kubelet
+      SHELL
+
+      # Install helm only on the control server
+      opts[:role] == :control and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        apt-get install -y helm
       SHELL
 
       # Use kubeadm to initialize the cluster
