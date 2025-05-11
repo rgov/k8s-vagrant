@@ -213,6 +213,11 @@ Vagrant.configure("2") do |config|
         done 2>/dev/null
 
         kubectl create -f /vagrant/files/calico-custom.yaml
+
+        # Copy the admin config to the vagrant user
+        mkdir /home/vagrant/.kube
+        cp /etc/kubernetes/admin.conf /home/vagrant/.kube/config
+        chown -R vagrant:vagrant /home/vagrant/.kube/config
       SHELL
 
       # The control node generates a script for each worker to join the cluster
