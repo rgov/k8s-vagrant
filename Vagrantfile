@@ -4,10 +4,10 @@ Vagrant.configure("2") do |config|
     { :name => "jumpbox", :role => :bastion,
       :cpus => 1, :memory => 512,  :disk => "10GB" },
     { :name => "server", :role => :control,
+      :cpus => 2, :memory => 2048, :disk => "20GB" },
+    { :name => "worker-0",  :role => :worker,
       :cpus => 1, :memory => 2048, :disk => "20GB" },
-    { :name => "node-0",  :role => :worker, :podsubnet => "10.200.0.0/24",
-      :cpus => 1, :memory => 2048, :disk => "20GB" },
-    { :name => "node-1", :role => :worker, :podsubnet => "10.200.1.0/24",
+    { :name => "worker-1", :role => :worker,
       :cpus => 1, :memory => 2048, :disk => "20GB" },
   ]
 

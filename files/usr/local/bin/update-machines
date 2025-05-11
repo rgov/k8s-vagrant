@@ -5,7 +5,7 @@
 
 HOSTNAME=$(hostname --short)
 
-while IFS=' ' read -r ADDR FQDN HOST SUBNET; do
+while IFS=' ' read -r ADDR FQDN HOST; do
     # Skip entries which haven't been populated yet
     if [ "$ADDR" = "x.x.x.x" ]; then
         continue
@@ -15,10 +15,5 @@ while IFS=' ' read -r ADDR FQDN HOST SUBNET; do
     ENTRY="$ADDR $FQDN $HOST"
     if ! grep -Fxq "$ENTRY" /etc/hosts; then
         echo "$ENTRY" >> /etc/hosts
-    fi
-
-    # Add routes for this host's subnet, except for our own
-    if [ -n "$SUBNET" -a "$HOSTNAME" != "$HOST" ]; then
-        ip route add "$SUBNET" via "$ADDR"
     fi
 done < /vagrant/shared/machines
