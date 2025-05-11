@@ -117,7 +117,6 @@ Vagrant.configure("2") do |config|
       # set a static IP on the private network interface.
       opts[:role] != :bastion and node.vm.provision "shell", inline: <<-SHELL
         set -eux
-
         rsync -a --no-o --no-g \
             /vagrant/files/etc/networkd-dispatcher/ /etc/networkd-dispatcher/
         systemctl start networkd-dispatcher.service
@@ -184,8 +183,56 @@ Vagrant.configure("2") do |config|
       node.vm.provision "shell", inline: <<-SHELL
         set -eux
         apt-get update
-        apt-get install -y cri-o kubeadm kubelet kubectl
+        apt-get install -y \
+          cri-o \
+          kubeadm \
+          kubelet \
+          kubectl \
+          yq
+        systemctl enable --now crio kubelet
       SHELL
+
+      # Use kubeadm to initialize the cluster
+      opts[:role] == :control and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+
+        FQDN=$(hostname --fqdn)
+        ADDR=$(ip addr show dev eth1 | awk '/inet / {print $2}' | cut -d/ -f1)
+        kubeadm init \
+          --apiserver-advertise-address="$ADDR" \
+          --control-plane-endpoint="${FQDN}:6443" \
+          --cri-socket=unix:///var/run/crio/crio.sock \
+
+        # Configure the Calico add-on
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubectl create -f \
+          https://raw.githubusercontent.com/projectcalico/calico/v3.30.0/manifests/tigera-operator.yaml
+
+        until kubectl get crd installations.operator.tigera.io; do
+          sleep 1
+        done 2>/dev/null
+
+        kubectl create -f /vagrant/files/calico-custom.yaml
+      SHELL
+
+      # The control node generates a script for each worker to join the cluster
+      boxes.select { |b| b[:role] == :worker }.each do |w|
+        opts[:role] == :control and node.vm.provision "shell", inline: <<-SHELL
+          SCRIPT=/vagrant/shared/cluster-join-#{w[:name]}.sh
+          (echo "#!/bin/sh"; echo "set -eu") > "$SCRIPT"
+          # TODO: Should wait for the server address to be known
+          kubeadm token create --print-join-command >> "$SCRIPT"
+          chmod +x "$SCRIPT"
+        SHELL
+      end
+
+      # Run the cluster join script on each worker
+      opts[:role] == :worker and node.vm.provision "shell", inline: <<-SHELL
+        set -eux
+        /vagrant/shared/cluster-join-#{opts[:name]}.sh
+        rm -f /vagrant/shared/cluster-join-#{opts[:name]}.sh
+      SHELL
+
     end
   end
 end
